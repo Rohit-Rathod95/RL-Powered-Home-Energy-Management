@@ -86,14 +86,21 @@ def test_cooling_rates_fractional_bounds() -> None:
 
 def test_calibration_warning_emitted_once() -> None:
     """Calibration warning must be issued when CALIBRATED is False, and only once per process."""
-    with warnings.catch_warnings(record=True) as recorded:
-        warnings.simplefilter("always")
-        check_calibration_warning()
-        check_calibration_warning()  # Second call should not warn again
+    import config
+    original_warned = config._WARNED_CALIBRATION
+    config._WARNED_CALIBRATION = False
+    try:
+        with warnings.catch_warnings(record=True) as recorded:
+            warnings.simplefilter("always")
+            check_calibration_warning()
+            check_calibration_warning()  # Second call should not warn again
 
-    # At least one warning recorded if CALIBRATED is False
-    if not CALIBRATED:
-        assert any("CALIBRATED is False" in str(w.message) for w in recorded)
+        # At least one warning recorded if CALIBRATED is False
+        if not CALIBRATED:
+            assert any("CALIBRATED is False" in str(w.message) for w in recorded)
+            assert len(recorded) == 1
+    finally:
+        config._WARNED_CALIBRATION = original_warned
 
 
 # ============================================================================
@@ -404,22 +411,103 @@ def test_always_cooler_dry_vs_humid() -> None:
 
 def test_1000_episodes_no_nan_or_inf() -> None:
     """No NaN or Inf values over random episodes across diverse seeds."""
-    try:
-        config = EnvConfig()
-        env = RoomEnv(config)
+    config = EnvConfig()
+    env = RoomEnv(config)
 
-        for episode in range(100):  # 100 full episodes = 4,800 steps for fast test run
-            obs, info = env.reset(seed=episode)
-            assert not any(np.isnan(obs))
+    for episode in range(100):  # 100 full episodes = 4,800 steps for fast test run
+        obs, info = env.reset(seed=episode)
+        assert not any(np.isnan(obs))
 
-            truncated = False
-            while not truncated:
-                a = int(env.rng.integers(0, 10))
-                obs, r, term, truncated, info = env.step(a)
+        truncated = False
+        while not truncated:
+            a = int(env.rng.integers(0, 10))
+            obs, r, term, truncated, info = env.step(a)
 
-                assert not np.isnan(r) and not np.isinf(r)
-                assert not np.isnan(info["indoor_temp"])
-                assert not np.isnan(info["energy_kwh"])
-                assert not np.isnan(info["cost"])
-    except NotImplementedError:
-        pytest.skip("Mode B stubs not yet implemented by user.")
+            assert not np.isnan(r) and not np.isinf(r)
+            assert not np.isnan(info["indoor_temp"])
+            assert not np.isnan(info["energy_kwh"])
+            assert not np.isnan(info["cost"])
+
+
+# ============================================================================
+# 8. Phase 1 Acceptance & Parameter Derivation Tests (A1, A5, Design Section 10)
+# ============================================================================
+def test_outdoor_temp_cosine_peaks() -> None:
+    """A1: Outdoor cosine temperature has maximum at 15:00 (step 30) and minimum at 03:00 (step 6)."""
+    config = EnvConfig()
+    temps = [compute_outdoor_temp(step * config.dt, 0.0, config) for step in range(config.episode_steps)]
+    assert np.argmax(temps) == 30, f"Expected peak at step 30 (15:00), got {np.argmax(temps)}"
+    assert np.argmin(temps) == 6, f"Expected trough at step 6 (03:00), got {np.argmin(temps)}"
+    assert temps[30] == pytest.approx(config.t_mean + config.t_amplitude)
+    assert temps[6] == pytest.approx(config.t_mean - config.t_amplitude)
+
+
+def test_steady_state_analytical_vs_sim_agreement() -> None:
+    """A5: Analytical T_settle agrees with 300-step simulation within 0.05 °C for all cases."""
+    from steady_state import compute_steady_state_table
+    records = compute_steady_state_table()
+    for r in records:
+        assert r["diff"] < 0.05, f"Case {r['case']} under {r['condition']} disagreed by {r['diff']:.5f} °C"
+
+
+def test_acceptance_always_off_worse_than_sensible_policy() -> None:
+    """Acceptance Test 2: Always-off is clearly worse than a sensible policy due to discomfort penalty."""
+    config = EnvConfig()
+    env_off = RoomEnv(config)
+    env_sensible = RoomEnv(config)
+    seed = 42
+
+    env_off.reset(seed=seed)
+    env_sensible.reset(seed=seed)
+
+    total_r_off = 0.0
+    total_r_sensible = 0.0
+
+    for step in range(config.episode_steps):
+        # Always off: action 0 (off, light off)
+        _, r_off, _, _, _ = env_off.step(0)
+        total_r_off += r_off
+
+        # Sensible policy: turn on AC when occupied, light when awake & dark
+        act = env_sensible.activity_schedule[step]
+        hour = step * config.dt
+        dark = (hour < config.daylight_start_hour or hour >= config.daylight_end_hour)
+        light = 1 if (act == ACTIVITY_AWAKE and dark) else 0
+        mode = MODE_AC_FAN_LOW if (act != ACTIVITY_AWAY) else MODE_OFF
+        action_sensible = encode_action(mode, light)
+        _, r_sens, _, _, _ = env_sensible.step(action_sensible)
+        total_r_sensible += r_sens
+
+    # Sensible policy avoids heavy thermal discomfort penalty, resulting in much higher (less negative) reward
+    assert total_r_sensible > total_r_off, f"Sensible {total_r_sensible} <= Always-off {total_r_off}"
+
+
+def test_acceptance_always_ac_costs_more_than_sensible_policy() -> None:
+    """Acceptance Test 3: Always-AC costs clearly more energy and rupees than a sensible policy."""
+    config = EnvConfig()
+    env_ac = RoomEnv(config)
+    env_sensible = RoomEnv(config)
+    seed = 42
+
+    env_ac.reset(seed=seed)
+    env_sensible.reset(seed=seed)
+
+    cost_ac = 0.0
+    cost_sensible = 0.0
+
+    action_always_ac = encode_action(MODE_AC_FAN_LOW, 1)
+    for step in range(config.episode_steps):
+        _, _, _, _, info_ac = env_ac.step(action_always_ac)
+        cost_ac += info_ac["cost"]
+
+        act = env_sensible.activity_schedule[step]
+        hour = step * config.dt
+        dark = (hour < config.daylight_start_hour or hour >= config.daylight_end_hour)
+        light = 1 if (act == ACTIVITY_AWAKE and dark) else 0
+        mode = MODE_AC_FAN_LOW if (act != ACTIVITY_AWAY) else MODE_OFF
+        action_sensible = encode_action(mode, light)
+        _, _, _, _, info_sens = env_sensible.step(action_sensible)
+        cost_sensible += info_sens["cost"]
+
+    assert cost_ac > cost_sensible * 1.5, f"Always-AC cost {cost_ac} not clearly > sensible cost {cost_sensible}"
+

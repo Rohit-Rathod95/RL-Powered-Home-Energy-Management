@@ -99,9 +99,9 @@ class EnvConfig:
 
     # Thermal dynamics parameters (Section 6)
     # PLACEHOLDER: Room thermal time constant in hours (read/measure room insulation)
-    tau: float = 4.0
+    tau: float = 5.0
     # PLACEHOLDER: Heat gain from occupants in °C per 30-min step
-    g_occ: float = 0.3
+    g_occ: float = 0.12
     # PLACEHOLDER: Mean daily outdoor temperature in °C
     t_mean: float = 32.0
     # PLACEHOLDER: Outdoor temperature sine wave amplitude in °C
@@ -110,11 +110,13 @@ class EnvConfig:
     t_peak_hour: float = 15.0
     # PLACEHOLDER: Standard deviation of outdoor temperature noise in °C
     outdoor_noise_std: float = 0.5
+    # PLACEHOLDER: Standard deviation of initial indoor temp offset relative to T_out(00:00) in °C
+    t_init_offset_std: float = 0.5
 
     # Cooling model parameters (Section 6)
     # Fractional gap closed per step: strictly between 0 and 1
     # PLACEHOLDER: Cooler fraction of gap closed per step
-    c_cooler: float = 0.20
+    c_cooler: float = 0.18
     # PLACEHOLDER: Cooler physical floor temperature in °C
     cooler_temp_floor: float = 24.0
     # PLACEHOLDER: Fractional degradation in dry weather (0 = no degradation)
@@ -124,9 +126,9 @@ class EnvConfig:
 
     # Fractional gap closed per step: strictly between 0 and 1
     # PLACEHOLDER: AC fraction of gap closed per step toward setpoint
-    c_ac: float = 0.25
+    c_ac: float = 0.35
     # PLACEHOLDER: AC setpoint in °C (chosen so steady state effective temp is in comfort band)
-    ac_setpoint: float = 25.5
+    ac_setpoint: float = 25.0
 
     # Fan effective temperature wind-chill effect (Section 6)
     # PLACEHOLDER: Perceived cooling effect of fan_low in °C

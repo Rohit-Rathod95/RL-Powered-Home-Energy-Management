@@ -39,6 +39,7 @@ from discretize import discretize_state
 from dynamics import (
     compute_effective_temp,
     compute_energy,
+    compute_outdoor_temp,
     compute_reward,
     next_temperature,
 )
@@ -120,7 +121,9 @@ class RoomEnv:
         self.outdoor_noises = self.rng.normal(0.0, self.config.outdoor_noise_std, size=self.config.episode_steps)
 
         self.step_idx = 0
-        self.indoor_temp = float(self.config.t_mean)
+        t_out_0 = compute_outdoor_temp(0.0, float(self.outdoor_noises[0]), self.config)
+        offset = float(self.rng.normal(0.0, self.config.t_init_offset_std))
+        self.indoor_temp = float(t_out_0 + offset)
         # Requirement 7: Initial prev_cooling_mode at reset is MODE_OFF (0)
         self.prev_cooling_mode = MODE_OFF
 
