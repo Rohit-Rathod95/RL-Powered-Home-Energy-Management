@@ -31,7 +31,7 @@ A simulated home room has a fan, an evaporative cooler, an AC and a light. An ag
 
 - Step: 30 min. Episode: 1 day = 48 steps. Each episode starts at 00:00.
 - Discount gamma: **TBD** (try 0.95 to 0.99 and compare).
-- At the end of the day the episode terminates. The TD target at the terminal step is just the reward (no bootstrap).
+- End of day is truncation, not termination: `terminated=False`, `truncated=True`. Q-learning still bootstraps from the wrapped next state.
 
 ---
 

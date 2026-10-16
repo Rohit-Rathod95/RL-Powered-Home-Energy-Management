@@ -60,8 +60,13 @@ def print_state_space_info(config: EnvConfig) -> None:
     print("=" * 80 + "\n")
 
 
-def run_all_baselines(config: EnvConfig | None = None) -> tuple[pd.DataFrame, list[dict]]:
-    """Tune policies on TRAIN_SEEDS and evaluate all controllers on EVAL_SEEDS."""
+def run_all_baselines(config: EnvConfig | None = None) -> tuple[pd.DataFrame, list[dict], dict]:
+    """Tune policies on TRAIN_SEEDS and evaluate all controllers on EVAL_SEEDS.
+
+    Returns:
+        tuple[pd.DataFrame, list[dict], dict]: (summary_df, summaries, all_dfs)
+            all_dfs maps controller name -> per-episode DataFrame for paired comparisons.
+    """
     cfg = config if config is not None else EnvConfig()
 
     print_state_space_info(cfg)
@@ -71,7 +76,10 @@ def run_all_baselines(config: EnvConfig | None = None) -> tuple[pd.DataFrame, li
     tuned_threshold = tune_threshold_policy(TRAIN_SEEDS, config=cfg)
     print(f"    Tuned Threshold Parameters: bin_2={tuned_threshold.mode_bin_2}, "
           f"bin_3={tuned_threshold.mode_bin_3}, bin_4_dry={tuned_threshold.mode_bin_4_dry}, "
-          f"bin_4_humid={tuned_threshold.mode_bin_4_humid}")
+          f"bin_4_humid={tuned_threshold.mode_bin_4_humid}, "
+          f"precool_mode={tuned_threshold.precool_mode}")
+    if hasattr(tuned_threshold, "best_train_reward"):
+        print(f"    Tuned Threshold Best Train Reward: {tuned_threshold.best_train_reward:.4f}")
 
     tuned_precool = tune_precool_policy(TRAIN_SEEDS, base_policy=tuned_threshold, config=cfg)
     print(f"    Tuned Precool (Block): lead_steps={tuned_precool.lead_steps} "
@@ -94,8 +102,8 @@ def run_all_baselines(config: EnvConfig | None = None) -> tuple[pd.DataFrame, li
         tuned_precool_clock,
     ]
 
-    summaries = []
-    all_dfs = {}
+    summaries: list[dict] = []
+    all_dfs: dict[str, pd.DataFrame] = {}
 
     print(f"\n 2. Evaluating {len(controllers)} controllers on EVAL_SEEDS (10000..10199)...")
     for ctrl in controllers:
@@ -107,7 +115,7 @@ def run_all_baselines(config: EnvConfig | None = None) -> tuple[pd.DataFrame, li
         summaries.append(summary)
 
     summary_df = pd.DataFrame(summaries)
-    return summary_df, summaries
+    return summary_df, summaries, all_dfs
 
 
 def print_results_table(summary_df: pd.DataFrame) -> None:

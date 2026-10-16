@@ -13,8 +13,9 @@ Implements B2:
       * energy_while_away: Energy consumed while household is away (kWh)
       * switches_per_day: Count of cooling mode switches during the day
       * total_reward: Sum of scalar rewards over the 48-step day
-  - Disjoint train and evaluation seeds:
+  - Disjoint train / validation / evaluation seeds (never mix):
       TRAIN_SEEDS = range(0, 1000)
+      VALIDATION_SEEDS = range(20000, 20050)
       EVAL_SEEDS = range(10000, 10200)
   - summarize_metrics(): Calculates mean and std across evaluation seeds.
 """
@@ -22,6 +23,7 @@ Implements B2:
 from __future__ import annotations
 
 from typing import Any
+import inspect
 import numpy as np
 import pandas as pd
 
@@ -30,8 +32,9 @@ from config import ACTIVITY_AWAKE, ACTIVITY_AWAY, EnvConfig
 from env import RoomEnv
 from schedule import is_dark
 
-# Strict train / eval seed partition
+# Strict train / validation / eval seed partition (never mix)
 TRAIN_SEEDS = range(0, 1000)
+VALIDATION_SEEDS = range(20000, 20050)
 EVAL_SEEDS = range(10000, 10200)
 
 
@@ -56,7 +59,6 @@ def run_episodes(
     records: list[dict[str, Any]] = []
 
     # Check if policy's select_action accepts a 'step' parameter (e.g. clock policies)
-    import inspect
     try:
         sig = inspect.signature(policy.select_action)
         policy_takes_step = "step" in sig.parameters

@@ -243,24 +243,33 @@ def tune_threshold_policy(
 
     Returns:
         TunedThresholdPolicy: Policy configured with the best-performing parameters.
+            The returned policy also has a `best_train_reward` attribute equal to the
+            highest average reward found in the grid (same seeds and env as tuning).
     """
     cfg = config if config is not None else EnvConfig()
 
-    # Candidate parameter grids (superset of earlier grid)
-    candidate_bin_2 = [MODE_OFF, MODE_FAN_LOW, MODE_COOLER_FAN]
-    candidate_bin_3 = [MODE_FAN_LOW, MODE_FAN_HIGH, MODE_COOLER_FAN, MODE_AC_FAN_LOW]
-    candidate_bin_4_dry = [MODE_COOLER_FAN, MODE_AC_FAN_LOW]
+    # ------------------------------------------------------------------
+    # Candidate parameter grids — strict superset of the original 144-combo grid:
+    #   Original: bin_2(3) × bin_3(4) × bin_4_dry(2) × bin_4_humid(2) × precool(3) = 144
+    #   This:     bin_2(4) × bin_3(4) × bin_4_dry(3) × bin_4_humid(2) × precool(3) = 288
+    #
+    #   bin_2    : added MODE_FAN_HIGH (was [OFF, FAN_LOW, COOLER_FAN])
+    #   bin_3    : unchanged [FAN_LOW, FAN_HIGH, COOLER_FAN, AC_FAN_LOW]
+    #   bin_4_dry: added MODE_FAN_HIGH (was [COOLER_FAN, AC_FAN_LOW])
+    #   bin_4_humid: unchanged [COOLER_FAN, AC_FAN_LOW]
+    #   precool  : unchanged [OFF, AC_FAN_LOW, COOLER_FAN]
+    # ------------------------------------------------------------------
+    candidate_bin_2      = [MODE_OFF, MODE_FAN_LOW, MODE_FAN_HIGH, MODE_COOLER_FAN]
+    candidate_bin_3      = [MODE_FAN_LOW, MODE_FAN_HIGH, MODE_COOLER_FAN, MODE_AC_FAN_LOW]
+    candidate_bin_4_dry  = [MODE_FAN_HIGH, MODE_COOLER_FAN, MODE_AC_FAN_LOW]
     candidate_bin_4_humid = [MODE_COOLER_FAN, MODE_AC_FAN_LOW]
-    candidate_precool = [MODE_OFF, MODE_AC_FAN_LOW, MODE_COOLER_FAN]
+    candidate_precool    = [MODE_OFF, MODE_AC_FAN_LOW, MODE_COOLER_FAN]
 
     best_reward = -float("inf")
     best_params = (MODE_FAN_LOW, MODE_FAN_HIGH, MODE_COOLER_FAN, MODE_AC_FAN_LOW, MODE_OFF)
 
-    # Use a representative subset of train seeds for grid search if train_seeds is large
-    # to maintain fast tuning speed while strictly remaining within train seeds
-    sample_seeds = list(train_seeds)
-    if len(sample_seeds) > 150:
-        sample_seeds = sample_seeds[:150]
+    # Use the first 200 train seeds (matches precool tuning; fast but representative)
+    sample_seeds = list(train_seeds)[:200]
 
     env = RoomEnv(cfg)
 
@@ -303,6 +312,8 @@ def tune_threshold_policy(
         precool_mode=best_params[4],
         config=cfg,
     )
+    # Store the best average reward found in the grid (on the tuning seeds)
+    # so callers can verify the returned policy is truly the argmax.
     policy.best_train_reward = best_reward
     return policy
 

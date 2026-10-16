@@ -4,7 +4,7 @@ Verification tests for Phase 2 baseline controllers and evaluation framework (B4
 
 Tests covered:
   1. Policy action validity: Every policy returns a valid integer action in [0, 9] for every possible discretized state.
-  2. Disjoint seed splits: TRAIN_SEEDS and EVAL_SEEDS have empty intersection.
+  2. Disjoint seed splits: TRAIN_SEEDS, VALIDATION_SEEDS, and EVAL_SEEDS have empty intersections.
   3. Evaluation determinism: Running evaluation on the same seeds yields identical episode metrics.
   4. Reward ordering sanity: TunedThresholdPolicy achieves strictly higher reward than AlwaysOffPolicy.
 """
@@ -26,17 +26,21 @@ from baselines import (
 )
 from config import EnvConfig
 from discretize import get_state_space_dims
-from evaluate import EVAL_SEEDS, TRAIN_SEEDS, run_episodes
+from evaluate import EVAL_SEEDS, TRAIN_SEEDS, VALIDATION_SEEDS, run_episodes
 
 
-def test_train_and_eval_seeds_are_disjoint() -> None:
-    """Train seeds (0..999) and evaluation seeds (10000..10199) must be strictly disjoint."""
+def test_train_val_eval_seeds_are_disjoint() -> None:
+    """Train (0..999), validation (20000..20049), and eval (10000..10199) must be pairwise disjoint."""
     train_set = set(TRAIN_SEEDS)
+    val_set = set(VALIDATION_SEEDS)
     eval_set = set(EVAL_SEEDS)
 
     assert len(train_set) == 1000, f"Expected 1000 train seeds, got {len(train_set)}"
+    assert len(val_set) == 50, f"Expected 50 validation seeds, got {len(val_set)}"
     assert len(eval_set) == 200, f"Expected 200 eval seeds, got {len(eval_set)}"
+    assert train_set.isdisjoint(val_set), "TRAIN_SEEDS and VALIDATION_SEEDS overlap!"
     assert train_set.isdisjoint(eval_set), "TRAIN_SEEDS and EVAL_SEEDS overlap!"
+    assert val_set.isdisjoint(eval_set), "VALIDATION_SEEDS and EVAL_SEEDS overlap!"
 
 
 def test_policies_return_valid_action_for_all_states() -> None:

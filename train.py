@@ -20,9 +20,9 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from config import COOLING_MODES, EnvConfig
+from config import ACTIVITY_AWAKE, COOLING_MODES, EnvConfig
 from env import RoomEnv, decode_action
-from evaluate import EVAL_SEEDS, TRAIN_SEEDS, run_episodes, summarize_metrics
+from evaluate import EVAL_SEEDS, TRAIN_SEEDS, VALIDATION_SEEDS, run_episodes, summarize_metrics
 from plot_training import plot_learning_curve
 from qlearning import (
     get_num_states,
@@ -33,10 +33,6 @@ from qlearning import (
     select_action,
     state_to_index,
 )
-
-# Seeds partition
-VALIDATION_SEEDS = range(20000, 20050)  # 50 validation seeds disjoint from train and eval
-
 
 class QLearningPolicy:
     """Policy wrapping a learned Q-table for evaluation."""
