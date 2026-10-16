@@ -6,8 +6,8 @@ Implements B1 & B2:
   - state_to_index(state, config): Mixed-radix bijection between discrete state tuple and flat integer index.
   - index_to_state(idx, config): Inverse mapping.
   - init_q_table(), init_visit_counts().
-  - select_action(): Stub with full docstring (user will implement).
-  - q_update(): Stub with full docstring (user will implement).
+  - select_action(): Epsilon-greedy with random tie-breaking.
+  - q_update(): In-place tabular Bellman update (bootstraps unless terminated).
 """
 
 from __future__ import annotations
@@ -66,7 +66,7 @@ def init_visit_counts(n_states: int, n_actions: int = 10) -> np.ndarray:
 
 
 # ============================================================================
-# Algorithmic Stubs (B2) - To be implemented by user
+# Epsilon-greedy selection and tabular Q-learning update (B2)
 # ============================================================================
 def select_action(
     q_table: np.ndarray,
@@ -92,9 +92,12 @@ def select_action(
     Returns:
         int: Selected action index in [0, 9].
     """
-    raise NotImplementedError(
-        "TODO (USER): Implement select_action() with epsilon-greedy and random tie-breaking."
-    )
+    n_actions = q_table.shape[1]
+    if rng.random() < epsilon:
+        return int(rng.integers(n_actions))
+    row = q_table[s_idx]
+    best_actions = np.flatnonzero(row == row.max())
+    return int(rng.choice(best_actions))
 
 
 def q_update(
@@ -131,6 +134,6 @@ def q_update(
         alpha: Learning rate parameter in (0, 1].
         gamma: Discount factor in [0, 1].
     """
-    raise NotImplementedError(
-        "TODO (USER): Implement q_update() performing the tabular Bellman update."
-    )
+    future = 0.0 if terminated else float(q_table[s_next_idx].max())
+    target = r + gamma * future
+    q_table[s_idx, a] += alpha * (target - q_table[s_idx, a])
