@@ -200,54 +200,39 @@ def train(
     return q_table, visit_counts, curves_df
 
 
-def analyze_learned_lighting(q_table: np.ndarray, config: EnvConfig) -> None:
-    """Analyze and print learned light action for every state where activity is awake and dark (Point 5)."""
+def analyze_learned_lighting(
+    q_table: np.ndarray,
+    config: EnvConfig,
+    visit_counts: np.ndarray,
+    min_visits: int = 20,
+) -> None:
+    """Light decision in awake-and-dark states, counting only states visited >= min_visits."""
     from schedule import is_dark
 
-    n_states = q_table.shape[0]
-    dark_awake_states = []
-
-    for s_idx in range(n_states):
-        state = index_to_state(s_idx, config)
-        time_block, activity, day_type, temp_bin, weather_regime = state[:5]
+    rows: list[tuple] = []
+    excluded = 0
+    for s_idx in range(q_table.shape[0]):
+        time_block, activity, day_type, temp_bin, regime = index_to_state(s_idx, config)[:5]
         mid_hour = (time_block + 0.5) * config.time_block_hours
-        dark = is_dark(mid_hour, config)
+        if not (activity == ACTIVITY_AWAKE and is_dark(mid_hour, config)):
+            continue
+        if visit_counts[s_idx].sum() < min_visits:
+            excluded += 1
+            continue
+        cooling, light_on = decode_action(int(np.argmax(q_table[s_idx])))
+        rows.append((s_idx, time_block, day_type, temp_bin, regime, COOLING_MODES[cooling], light_on))
 
-        if activity == ACTIVITY_AWAKE and dark:
-            greedy_act = int(np.argmax(q_table[s_idx]))
-            cooling_mode, light_on = decode_action(greedy_act)
-            dark_awake_states.append({
-                "state_idx": s_idx,
-                "time_block": time_block,
-                "day_type": day_type,
-                "temp_bin": temp_bin,
-                "weather_regime": weather_regime,
-                "action": greedy_act,
-                "cooling": COOLING_MODES[cooling_mode],
-                "light_on": light_on,
-            })
-
-    total_states = len(dark_awake_states)
-    if total_states == 0:
-        return
-
-    lights_on = sum(1 for s in dark_awake_states if s["light_on"] == 1)
-    share_on = (lights_on / total_states) * 100.0
-
-    print("\n" + "=" * 95)
-    print(" LEARNED LIGHTING ACTIONS IN DARK AWAKE STATES (Point 5)")
-    print(f" Total Awake & Dark States: {total_states} | Light ON: {lights_on}/{total_states} ({share_on:.1f}%)")
-    print("=" * 95)
-    print(f"{'State Idx':<10} | {'Block':<6} | {'Day':<8} | {'Bin':<5} | {'Regime':<8} | {'Cooling Mode':<15} | {'Light Action':<12}")
-    print("-" * 95)
-    for s in dark_awake_states:
-        day_str = "workday" if s["day_type"] == 0 else "weekend"
-        reg_str = "dry" if s["weather_regime"] == 0 else "humid"
-        light_str = "ON (1)" if s["light_on"] == 1 else "OFF (0)"
-        print(f"{s['state_idx']:<10} | {s['time_block']:<6} | {day_str:<8} | {s['temp_bin']:<5} | {reg_str:<8} | {s['cooling']:<15} | {light_str:<12}")
-    print("-" * 95)
-    print(f" SUMMARY: Light is ON in {lights_on}/{total_states} ({share_on:.1f}%) of awake-and-dark states.")
-    print("=" * 95 + "\n")
+    on = sum(r[-1] for r in rows)
+    print(f"\n LIGHTING CHECK (states visited >= {min_visits} times)")
+    print(f" Awake-and-dark states counted: {len(rows)} | excluded (rarely visited): {excluded}")
+    if rows:
+        print(f" Light ON in {on}/{len(rows)} ({100 * on / len(rows):.1f}%)")
+    for r in rows:
+        if r[-1] == 0:
+            print(
+                f"   light OFF in state {r[0]} "
+                f"(block {r[1]}, day {r[2]}, bin {r[3]}, regime {r[4]}, {r[5]})"
+            )
 
 
 def main() -> None:
@@ -276,6 +261,8 @@ def main() -> None:
     # Save artifacts
     np.save("q_table.npy", q_table)
     print(" Saved: q_table.npy")
+    np.save("visit_counts.npy", visit_counts)
+    print(" Saved: visit_counts.npy")
 
     curves_df.to_csv("curves.csv", index=False)
     print(" Saved: curves.csv")
@@ -295,8 +282,7 @@ def main() -> None:
         if isinstance(v, float):
             print(f"   {k}: {v:.2f}")
 
-    # Analyze learned lighting actions in dark awake states (Point 5)
-    analyze_learned_lighting(q_table, cfg)
+    analyze_learned_lighting(q_table, cfg, visit_counts)
 
 
 if __name__ == "__main__":

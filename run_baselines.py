@@ -24,6 +24,7 @@ Implements B3 and A1-A4:
 from __future__ import annotations
 
 import sys
+import json
 import matplotlib
 matplotlib.use("Agg")  # Non-interactive background backend
 import matplotlib.pyplot as plt
@@ -240,6 +241,31 @@ def main() -> None:
     csv_path = "results.csv"
     summary_df.to_csv(csv_path, index=False)
     print(f" Results successfully exported to: {csv_path}")
+
+    # Persist the selected training-only tuning results so dashboards can load
+    # exactly these controllers without re-running the grid searches.
+    baseline_params = {
+        "tuned_threshold": {
+            "mode_bin_2": tuned_threshold.mode_bin_2,
+            "mode_bin_3": tuned_threshold.mode_bin_3,
+            "mode_bin_4_dry": tuned_threshold.mode_bin_4_dry,
+            "mode_bin_4_humid": tuned_threshold.mode_bin_4_humid,
+            "precool_mode": tuned_threshold.precool_mode,
+        },
+        "tuned_precool_block": {
+            "lead_steps": tuned_precool.lead_steps,
+            "trigger_bin": tuned_precool.trigger_bin,
+            "precool_mode": tuned_precool.precool_mode,
+        },
+        "tuned_precool_clock": {
+            "lead_steps": tuned_precool_clock.lead_steps,
+            "trigger_bin": tuned_precool_clock.trigger_bin,
+            "precool_mode": tuned_precool_clock.precool_mode,
+        },
+    }
+    with open("baseline_params.json", "w", encoding="utf-8") as handle:
+        json.dump(baseline_params, handle, indent=2)
+    print(" Tuning parameters successfully exported to: baseline_params.json")
 
     # Save pareto.png
     plot_pareto_front(summary_df, output_path="pareto.png")
