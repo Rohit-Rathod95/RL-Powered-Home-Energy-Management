@@ -121,6 +121,36 @@ def temperature_chart(q_df: pd.DataFrame, off_df: pd.DataFrame):
         linestyle="--",
         label="Always Off",
     )
+    away_hours = q_df.loc[q_df["activity"] == 0, "hour"]
+    for i, hour in enumerate(away_hours):
+        ax.axvspan(
+            hour,
+            hour + CFG.dt,
+            color="grey",
+            alpha=0.18,
+            lw=0,
+            label="Household away" if i == 0 else None,
+        )
+    ac_on = q_df[q_df["mode"] == "ac_fan_low"]
+    ax.scatter(
+        ac_on["hour"] + CFG.dt / 2,
+        [CFG.t_comfort_lo - 0.5] * len(ac_on),
+        marker="s",
+        s=45,
+        color="red",
+        zorder=5,
+        label="AC on (Q-learning)",
+    )
+    cooler_on = q_df[q_df["mode"] == "cooler_fan"]
+    ax.scatter(
+        cooler_on["hour"] + CFG.dt / 2,
+        [CFG.t_comfort_lo - 1.2] * len(cooler_on),
+        marker="^",
+        s=45,
+        color="purple",
+        zorder=5,
+        label="Cooler on (Q-learning)",
+    )
     ax.set_title("Indoor temperature during the same simulated day")
     ax.set_xlabel("Hour of day")
     ax.set_ylabel("Indoor temperature (C)")
@@ -179,6 +209,9 @@ else:
         with st.spinner("Simulating both controllers on the same day..."):
             q_results = run_day(q_policy, selected_seed)
             off_results = run_day(policies["Always Off"], selected_seed)
+            on_results = run_day(
+                FixedPolicy(encode_action(4, 1)), selected_seed
+            )
 
         st.subheader("Results for this simulated day")
         st.caption(
@@ -186,8 +219,12 @@ else:
             "A single day is an example, not proof of average performance."
         )
         comparison = pd.DataFrame(
-            [summarize_day(q_results), summarize_day(off_results)],
-            index=["Q-learning", "Always Off"],
+            [
+                summarize_day(q_results),
+                summarize_day(off_results),
+                summarize_day(on_results),
+            ],
+            index=["Q-learning", "Always Off", "Always On (AC + light)"],
         )
         comparison.index.name = "Controller"
         st.dataframe(comparison.round(2), use_container_width=True)
